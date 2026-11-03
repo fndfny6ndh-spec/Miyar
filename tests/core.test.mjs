@@ -1,0 +1,11 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {applicable,summary,level,gaps,validateState} from '../core.js';
+const items=JSON.parse(await readFile(new URL('../indicators.json',import.meta.url)));
+test('official library contains 52 unique indicators and 11 standards',()=>{assert.equal(items.length,52);assert.equal(new Set(items.map(i=>i.id)).size,52);assert.equal(new Set(items.map(i=>i.standard)).size,11);assert.deepEqual([1,2,3,4].map(d=>items.filter(i=>i.domain===d).length),[19,13,13,7]);assert.ok(items.every(i=>i.text.length>30&&i.page>=11&&i.page<=14))});
+test('school type excludes exactly three private indicators',()=>{assert.equal(applicable(items,'government').length,49);assert.equal(applicable(items,'private').length,52);assert.equal(applicable(items,'international').length,52)});
+test('missing scores remain incomplete; zero is a valid rating',()=>{const a={[items[0].id]:{score:0},[items[1].id]:{score:100}};let s=summary(items,a);assert.equal(s.completed,2);assert.equal(s.score,50);assert.equal(s.complete,false);assert.equal(summary(items,{}).score,null);assert.equal(summary(items,{[items[0].id]:{score:null}}).completed,0)});
+test('gaps use percentage points and exclude missing or at-target indicators',()=>{const a={[items[0].id]:{score:25},[items[1].id]:{score:75},[items[2].id]:{score:0}};const g=gaps(items,a,75);assert.deepEqual(g.map(i=>i.gap),[75,50]);assert.equal(g[0].id,items[2].id)});
+test('performance reference boundaries',()=>{assert.equal(level(null),'لم يُقيّم');assert.equal(level(49.9),'التهيئة');assert.equal(level(50),'الانطلاق');assert.equal(level(75),'التقدم');assert.equal(level(90),'التميز')});
+test('import rejects invalid scores and incompatible data',()=>{const s={version:1,school:{name:'مدرسة',type:'government'},target:75,answers:{},tasks:[],team:[],cycles:[]};assert.equal(validateState(s,items),s);assert.throws(()=>validateState({...s,target:101},items));assert.throws(()=>validateState({...s,answers:{[items[0].id]:{score:-1,notes:''}}},items));assert.throws(()=>validateState({...s,answers:{unknown:{score:90,notes:''}}},items))});
